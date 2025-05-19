@@ -302,7 +302,8 @@ object BulkCopyUtils extends Logging {
           zip df.schema.fieldNames.toList).toMap
         val dfCols = df.schema
 
-        val tableCols = getSchema(rs, JdbcDialects.get(url))
+        // Spark 3.5: getSchema now needs the DB connection as 1st argument
+        val tableCols = getSchema(conn, rs, JdbcDialects.get(url))
         val computedCols = getComputedCols(conn, dbtable)
 
         val prefix = "Spark Dataframe and SQL Server table have differing"
@@ -499,7 +500,9 @@ object BulkCopyUtils extends Logging {
                         df: DataFrame,
                         options: SQLServerBulkJdbcOptions): Unit = {
         logDebug("Creating table")
-        val strSchema = schemaString(df.schema, true, options.url, options.createTableColumnTypes)
+        // Spark 3.5: schemaString signature is (dialect, schema, caseSensitive, ...)
+        val dialect    = JdbcDialects.get(options.url)
+        val strSchema = schemaString(dialect, df.schema, caseSensitive = true, options.createTableColumnTypes)
         val createTableStr = s"CREATE TABLE ${options.dbtable} (${strSchema}) ${options.createTableOptions}"
         executeUpdate(conn,createTableStr)
         logDebug("Creating table succeeded")
@@ -517,7 +520,7 @@ object BulkCopyUtils extends Logging {
         df: DataFrame,
         options: SQLServerBulkJdbcOptions): Unit = {
         logDebug(s"Creating external table ${options.dbtable}")
-        val strSchema = schemaString(df.schema, true, "jdbc:sqlserver")
+        val strSchema = schemaString(JdbcDialects.get("jdbc:sqlserver"), df.schema, caseSensitive = true)
         val createExTableStr =  s"CREATE EXTERNAL TABLE ${options.dbtable} (${strSchema}) " +
           s"WITH (DATA_SOURCE=${options.dataPoolDataSource}, DISTRIBUTION=${options.dataPoolDistPolicy});"
         executeUpdate(conn,createExTableStr)
